@@ -1,0 +1,471 @@
+import cn.hutool.core.util.RuntimeUtil
+
+apply plugin: "com.android.application"
+apply plugin: "kotlin-android"
+
+def verName = "7.7.2-rc02"
+def verCode = 290 + 3 * 2
+
+if (System.getenv("DEBUG_BUILD") == "true") {
+    verName += "-" + RuntimeUtil.execForStr("git log --pretty=format:'%h' -n 1)")
+}
+
+def officialVer = "7.7.2"
+def officialCode = 2293
+
+def serviceAccountCredentialsFile = rootProject.file("service_account_credentials.json")
+
+def beta = verName.contains("preview")
+
+if (serviceAccountCredentialsFile.isFile()) {
+    setupPlay(beta)
+    play.serviceAccountCredentials = serviceAccountCredentialsFile
+} else if (System.getenv().containsKey("ANDROID_PUBLISHER_CREDENTIALS")) {
+    setupPlay(beta)
+}
+
+void setupPlay(boolean beta) {
+    apply plugin: "com.github.triplet.play"
+    play {
+        track = beta ? "beta" : "production"
+        defaultToAppBundles = true
+    }
+}
+
+configurations {
+    compile.exclude module: "support-v4"
+}
+
+def keystorePwd = null
+def alias = null
+def pwd = null
+
+Properties properties
+def base64 = System.getenv("LOCAL_PROPERTIES")
+if (base64 != null && !base64.isBlank()) {
+    properties = new Properties()
+    properties.load(new ByteArrayInputStream(Base64.decoder.decode(base64)))
+} else if (project.rootProject.file("local.properties").exists()) {
+    properties = new Properties()
+    properties.load(project.rootProject.file("local.properties").newDataInputStream())
+}
+
+if (properties != null) {
+    keystorePwd = properties.getProperty("KEYSTORE_PASS")
+    alias = properties.getProperty("ALIAS_NAME")
+    pwd = properties.getProperty("ALIAS_PASS")
+}
+
+keystorePwd = keystorePwd ?: System.getenv("KEYSTORE_PASS")
+alias = alias ?: System.getenv("ALIAS_NAME")
+pwd = pwd ?: System.getenv("ALIAS_PASS")
+
+def targetAbi = ""
+def targetTask = ""
+if (!gradle.startParameter.taskNames.isEmpty()) {
+    if (gradle.startParameter.taskNames.size == 1) {
+        targetTask = gradle.startParameter.taskNames[0].toLowerCase()
+        if (targetTask.contains("arm64")) {
+            targetAbi = "arm64"
+        } else if (targetTask.contains("arm")) {
+            targetAbi = "arm"
+            verCode -= 1
+        }
+    }
+}
+
+def nativeTarget = System.getenv("NATIVE_TARGET")
+if (nativeTarget == null) nativeTarget = ""
+
+android {
+    compileSdkVersion 30
+    buildToolsVersion "30.0.3"
+    ndkVersion rootProject.ext.ndkVersion
+
+    defaultConfig.applicationId = "nekox.messenger"
+
+    splits {
+
+        abi {
+
+            enable true
+            universalApk false
+
+            if (!targetAbi.isBlank()) {
+                reset()
+                if (targetAbi == "arm64") {
+                    include "arm64-v8a"
+                } else if (targetAbi == "arm") {
+                    include "armeabi-v7a"
+                }
+            } else if (!nativeTarget.isBlank()) {
+                reset()
+                include nativeTarget
+            }
+        }
+
+    }
+
+    defaultConfig {
+        minSdkVersion 16
+        //noinspection ExpiredTargetSdkVersion,OldTargetApi
+        targetSdkVersion 29
+
+        versionName verName
+        versionCode verCode
+
+        def appId = "1391584"
+        def appHash = "355c91550b0d658cfb7ff89dcf91a08c"
+
+        //obtain your own keys at https://core.telegram.org/api/obtaining_api_id
+
+        if (properties != null) {
+            appId = properties.getProperty("TELEGRAM_APP_ID") ?: System.getenv("TELEGRAM_APP_ID") ?: appId
+            appHash = properties.getProperty("TELEGRAM_APP_HASH") ?: System.getenv("TELEGRAM_APP_HASH") ?: appHash
+        }
+
+
+        buildConfigField "String", "OFFICIAL_VERSION", "\"" + officialVer + "\""
+        buildConfigField "int", "OFFICIAL_VERSION_CODE", officialCode + ""
+        buildConfigField "int", "APP_ID", appId
+        buildConfigField "String", "APP_HASH", "\"" + appHash + "\""
+
+        externalNativeBuild {
+            cmake {
+                version "3.10.2"
+                arguments "-DANDROID_STL=c++_static", "-DANDROID_PLATFORM=android-16", "-j=${Runtime.getRuntime().availableProcessors()}"
+            }
+        }
+
+    }
+
+    bundle {
+        language {
+            enableSplit = false
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "jni/CMakeLists.txt"
+        }
+    }
+
+    lintOptions {
+        disable "MissingTranslation"
+        disable "ExtraTranslation"
+        disable "BlockedPrivateApi"
+    }
+
+    packagingOptions {
+
+        exclude "/fabric/**"
+        exclude "/META-INF/*.version"
+        exclude "/META-INF/*.kotlin_module"
+        exclude "/META-INF/native-image/**"
+        exclude "/builddef.lst"
+        exclude "/*.txt"
+        exclude "/DebugProbesKt.bin"
+        exclude "/okhttp3/internal/publicsuffix/NOTICE"
+
+    }
+
+    dexOptions {
+        jumboMode = true
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+
+        coreLibraryDesugaringEnabled true
+    }
+
+    kotlinOptions {
+        jvmTarget = JavaVersion.VERSION_1_8.toString()
+    }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
+
+    signingConfigs {
+        release {
+            storeFile project.file("release.keystore")
+            storePassword keystorePwd
+            keyAlias alias
+            keyPassword pwd
+        }
+    }
+
+    buildTypes {
+        debug {
+            isDefault true
+            debuggable true
+            jniDebuggable true
+            multiDexEnabled true
+            zipAlignEnabled true;
+            signingConfig keystorePwd == null ? signingConfigs.debug : signingConfigs.release
+            ndk.debugSymbolLevel = 'FULL'
+        }
+
+        releaseNoGcm {
+            debuggable false
+            jniDebuggable false
+            minifyEnabled true
+            shrinkResources true
+            multiDexEnabled true
+            zipAlignEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            matchingFallbacks = ["release", "debug"]
+            signingConfig keystorePwd == null ? signingConfigs.debug : signingConfigs.release
+        }
+
+        release {
+            debuggable false
+            jniDebuggable false
+            minifyEnabled true
+            shrinkResources true
+            multiDexEnabled true
+            zipAlignEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            matchingFallbacks = ["release", "debug"]
+            signingConfig keystorePwd == null ? signingConfigs.debug : signingConfigs.release
+        }
+
+        foss {
+            debuggable false
+            jniDebuggable false
+            minifyEnabled true
+            shrinkResources true
+            multiDexEnabled true
+            zipAlignEnabled true
+            proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"
+            matchingFallbacks = ["release", "debug"]
+        }
+
+        fdroidArmRelease {
+            initWith foss
+            matchingFallbacks = ["release", "debug"]
+        }
+
+        fdroidArm64Release {
+            initWith foss
+            matchingFallbacks = ["release", "debug"]
+        }
+    }
+
+    sourceSets {
+
+        main {
+            jni.srcDirs = []
+        }
+
+        debug {
+            java {
+                srcDirs "src/main/java", "src/gservcies/java"
+            }
+            jni {
+                srcDirs = ["./jni/"]
+            }
+            jniLibs {
+                srcDirs = []
+            }
+            manifest {
+                srcFile "src/gservcies/AndroidManifest.xml"
+            }
+        }
+
+        releaseNoGcm {
+            jniLibs {
+                srcDir "src/main/libs"
+            }
+        }
+
+        release {
+            java {
+                srcDirs "src/main/java", "src/gservcies/java"
+            }
+            jniLibs {
+                srcDir "src/main/libs"
+            }
+            manifest {
+                srcFile "src/gservcies/AndroidManifest.xml"
+            }
+        }
+
+        foss {
+            jni {
+                srcDirs = ["./jni/"]
+            }
+        }
+
+        fdroidArmRelease {
+            jni {
+                srcDirs = ["./jni/"]
+            }
+            jniLibs {
+                srcDirs = []
+            }
+        }
+
+        fdroidArm64Release {
+            jni {
+                srcDirs = ["./jni/"]
+            }
+            jniLibs {
+                srcDirs = []
+            }
+        }
+
+    }
+
+    flavorDimensions "version"
+
+    productFlavors {
+        mini {
+        }
+        miniAppleEmoji {
+        }
+        full {
+            isDefault true
+        }
+        fullAppleEmoji {
+        }
+        fullPlay {
+            versionNameSuffix "-play"
+            versionCode verCode - 2
+        }
+    }
+
+    sourceSets.all { set ->
+        if (set.name.startsWith("full")) {
+            set.dependencies {
+                implementation fileTree("libs")
+            }
+        }
+        if (set.name.matches("(mini|full).*")) {
+            if (set.name.contains("Apple")) {
+                set.assets.srcDirs = ["src/main/assets", "src/emojis/apple"]
+                /*} else if (set.name.contains("Twitter")) {
+                    set.assets.srcDirs = ["src/main/assets", "src/emojis/twitter"]*/
+            } else {
+                set.assets.srcDirs = ["src/main/assets", "src/emojis/twitter"]
+            }
+        }
+    }
+
+    tasks.all { task ->
+        if (((task.name.endsWith("Ndk") || task.name.startsWith("generateJsonModel") || task.name.startsWith("externalNativeBuild"))) && !(task.name.contains("Debug") || task.name.contains("Foss") || task.name.contains("Fdroid"))) {
+            task.enabled = false
+        }
+        if (task.name.contains("uploadCrashlyticsMappingFile")) {
+            enabled = false
+        }
+    }
+
+    applicationVariants.all { variant ->
+        def flavor = variant.mergedFlavor
+        if (variant.buildType.name == "fdroidArmRelease") {
+            variant.outputs.each { output ->
+                output.versionNameOverride = flavor.versionName + "-armeabi-v7a"
+            }
+        } else if (variant.buildType.name == "fdroidArm64Release") {
+            variant.outputs.each { output ->
+                output.versionNameOverride = flavor.versionName + "-arm64-v8a"
+            }
+        }
+        variant.outputs.all { output ->
+            outputFileName = outputFileName.replace("TMessagesProj", "NekoX")
+        }
+    }
+
+}
+
+def okHttpVersion = "5.0.0-alpha.2"
+def fcmVersion = "21.1.0"
+def crashlyticsVersion = "17.4.1"
+def playCoreVersion = "1.10.0"
+
+dependencies {
+
+    implementation "androidx.browser:browser:1.3.0"
+    implementation "androidx.core:core-ktx:1.6.0-alpha02"
+    implementation "androidx.palette:palette-ktx:1.0.0"
+    implementation "androidx.viewpager:viewpager:1.0.0"
+    implementation "androidx.exifinterface:exifinterface:1.3.2"
+    implementation "androidx.interpolator:interpolator:1.0.0"
+    implementation "androidx.dynamicanimation:dynamicanimation:1.0.0"
+    implementation "androidx.multidex:multidex:2.0.1"
+    implementation "androidx.sharetarget:sharetarget:1.1.0"
+
+    compileOnly "org.checkerframework:checker-qual:3.12.0"
+    compileOnly "org.checkerframework:checker-compat-qual:2.5.5"
+
+    // don"t change this :)
+    //noinspection GradleDependency
+    implementation "com.googlecode.mp4parser:isoparser:1.0.6"
+
+    implementation "com.google.code.gson:gson:2.8.6"
+    implementation "org.osmdroid:osmdroid-android:6.1.10"
+    implementation "org.jetbrains.kotlin:kotlin-stdlib-jdk8:1.4.32"
+    implementation "org.jetbrains.kotlinx:kotlinx-coroutines-android:1.4.3"
+
+    implementation "com.squareup.okhttp3:okhttp:$okHttpVersion"
+    implementation "dnsjava:dnsjava:3.3.1"
+    implementation "org.dizitart:nitrite:3.4.3"
+
+    implementation "cn.hutool:hutool-core:5.6.3"
+    implementation "cn.hutool:hutool-crypto:5.6.3"
+    implementation "cn.hutool:hutool-http:5.6.3"
+    implementation "com.jakewharton:process-phoenix:2.0.0"
+
+    compileOnly "org.yaml:snakeyaml:1.28"
+    fullImplementation "org.yaml:snakeyaml:1.28"
+
+    implementation project(":openpgp-api")
+
+    compileOnly fileTree("libs")
+
+    compileOnly "com.google.firebase:firebase-messaging:$fcmVersion"
+    compileOnly "com.google.firebase:firebase-crashlytics:$crashlyticsVersion"
+    compileOnly "com.google.android.play:core:$playCoreVersion"
+
+    debugImplementation "com.google.firebase:firebase-messaging:$fcmVersion"
+    debugImplementation "com.google.firebase:firebase-crashlytics:$crashlyticsVersion"
+    debugImplementation "com.google.android.play:core:$playCoreVersion"
+    releaseImplementation "com.google.firebase:firebase-messaging:$fcmVersion"
+    releaseImplementation "com.google.firebase:firebase-crashlytics:$crashlyticsVersion"
+    releaseImplementation "com.google.android.play:core:$playCoreVersion"
+
+    testImplementation "junit:junit:4.13.2"
+    testImplementation "androidx.test:core:1.3.0"
+    testImplementation "org.robolectric:robolectric:4.5.1"
+
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:1.1.5"
+    if (!targetAbi.isBlank()) {
+        def ll = new File("TMessagesProj/libs").list()
+        if (ll != null && ll.length == 1) {
+            implementation project(":ss-rust")
+            implementation project(":ssr-libev")
+        }
+    }
+
+}
+
+apply plugin: "com.google.gms.google-services"
+apply plugin: "com.google.firebase.crashlytics"
+
+android {
+
+    tasks.all { task ->
+        if (task.name.startsWith("uploadCrashlyticsMappingFile")) {
+            task.enabled = false
+        } else if (task.name.contains("Crashlytics") && task.name.contains("NoGcm")) {
+            task.enabled = false
+        } else if (task.name.endsWith("GoogleServices") && task.name.contains("NoGcm")) {
+            task.enabled = false
+        }
+    }
+
+}
