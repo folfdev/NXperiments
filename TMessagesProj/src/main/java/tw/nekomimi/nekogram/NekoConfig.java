@@ -143,6 +143,7 @@ public class NekoConfig {
 
     public static boolean avatarBackgroundBlur;
     public static boolean avatarBackgroundDarken;
+    public static boolean enableAnimatedDrawer;
     public static boolean disableTrending;
 
     public static boolean disableAutoDownloadingWin32Executable;
@@ -236,6 +237,7 @@ public class NekoConfig {
         avatarAsDrawerBackground = preferences.getBoolean("avatarAsDrawerBackground", true);
         avatarBackgroundBlur = preferences.getBoolean("avatarBackgroundBlur", false);
         avatarBackgroundDarken = preferences.getBoolean("avatarBackgroundDarken", false);
+        enableAnimatedDrawer = preferences.getBoolean("enableAnimatedDrawer", false);
         useSystemEmoji = preferences.getBoolean("useSystemEmoji", false);
         showTabsOnForward = preferences.getBoolean("showTabsOnForward", false);
         rearVideoMessages = preferences.getBoolean("rearVideoMessages", false);
@@ -552,6 +554,14 @@ public class NekoConfig {
         SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
         SharedPreferences.Editor editor = preferences.edit();
         editor.putBoolean("avatarBackgroundDarken", avatarBackgroundDarken);
+        editor.commit();
+    }
+
+    public static void toggleEnableAnimatedDrawer() {
+        enableAnimatedDrawer = !enableAnimatedDrawer;
+        SharedPreferences preferences = ApplicationLoader.applicationContext.getSharedPreferences("nekoconfig", Activity.MODE_PRIVATE);
+        SharedPreferences.Editor editor = preferences.edit();
+        editor.putBoolean("enableAnimatedDrawer", enableAnimatedDrawer);
         editor.commit();
     }
 

@@ -87,6 +87,7 @@ public class NekoGeneralSettingsActivity extends BaseFragment {
     private int avatarAsDrawerBackgroundRow;
     private int avatarBackgroundBlurRow;
     private int avatarBackgroundDarkenRow;
+    private int enableAnimatedDrawerRow;
     private int drawer2Row;
 
     private int transRow;
@@ -459,6 +460,13 @@ public class NekoGeneralSettingsActivity extends BaseFragment {
                 }
                 getNotificationCenter().postNotificationName(NotificationCenter.mainUserInfoChanged);
                 listAdapter.notifyItemChanged(drawerRow);
+            } else if (position == enableAnimatedDrawerRow) {
+                NekoConfig.toggleEnableAnimatedDrawer();
+                if (view instanceof TextCheckCell) {
+                    ((TextCheckCell) view).setChecked(NekoConfig.enableAnimatedDrawer);
+                }
+                getNotificationCenter().postNotificationName(NotificationCenter.mainUserInfoChanged);
+                listAdapter.notifyItemChanged(drawerRow);
             } else if (position == showIdAndDcRow) {
                 NekoConfig.toggleShowIdAndDc();
                 if (view instanceof TextCheckCell) {
@@ -724,9 +732,11 @@ public class NekoGeneralSettingsActivity extends BaseFragment {
         if (NekoConfig.avatarAsDrawerBackground) {
             avatarBackgroundBlurRow = rowCount++;
             avatarBackgroundDarkenRow = rowCount++;
+            enableAnimatedDrawerRow = rowCount++;
         } else {
             avatarBackgroundBlurRow = -1;
             avatarBackgroundDarkenRow = -1;
+            enableAnimatedDrawerRow = -1;
         }
         hidePhoneRow = rowCount++;
         drawer2Row = rowCount++;
@@ -997,6 +1007,8 @@ public class NekoGeneralSettingsActivity extends BaseFragment {
                         textCell.setTextAndCheck(LocaleController.getString("BlurAvatarBackground", R.string.BlurAvatarBackground), NekoConfig.avatarBackgroundBlur, true);
                     } else if (position == avatarBackgroundDarkenRow) {
                         textCell.setTextAndCheck(LocaleController.getString("DarkenAvatarBackground", R.string.DarkenAvatarBackground), NekoConfig.avatarBackgroundDarken, true);
+                    } else if (position == enableAnimatedDrawerRow) {
+                        textCell.setTextAndValueAndCheck(LocaleController.getString("EnableAnimatedDrawerProfilePicture", R.string.EnableAnimatedDrawerProfilePicture), LocaleController.getString("EnableAnimatedDrawerProfilePictureDescription", R.string.EnableAnimatedDrawerProfilePictureDescription), NekoConfig.enableAnimatedDrawer, true, true);
                     }
                     break;
                 }
