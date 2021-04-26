@@ -37,7 +37,10 @@ import org.telegram.messenger.ImageReceiver;
 import org.telegram.messenger.LocaleController;
 import org.telegram.messenger.R;
 import org.telegram.messenger.UserObject;
+import org.telegram.messenger.UserConfig;
 import org.telegram.messenger.Utilities;
+import org.telegram.messenger.MessagesController;
+import org.telegram.messenger.NotificationCenter;
 import org.telegram.tgnet.TLRPC;
 import org.telegram.ui.ActionBar.Theme;
 import org.telegram.ui.Components.AudioPlayerAlert;
@@ -51,7 +54,7 @@ import org.telegram.ui.Components.SnowflakesEffect;
 
 import tw.nekomimi.nekogram.NekoConfig;
 
-public class DrawerProfileCell extends FrameLayout {
+public class DrawerProfileCell extends FrameLayout implements NotificationCenter.NotificationCenterDelegate {
 
     private BackupImageView avatarImageView;
     private TextView nameTextView;
@@ -319,7 +322,32 @@ public class DrawerProfileCell extends FrameLayout {
             avatarImageView.setVisibility(VISIBLE);
         }
 
+        if (NekoConfig.enableAnimatedDrawer && !NekoConfig.avatarBackgroundDarken && !NekoConfig.avatarBackgroundBlur) {
+            imageReceiver.clearImage();
+            TLRPC.UserFull userFull = MessagesController.getInstance(UserConfig.selectedAccount).getUserFull(UserConfig.getInstance(UserConfig.selectedAccount).getClientUserId());
+            if (userFull.profile_photo != null && !userFull.profile_photo.video_sizes.isEmpty()) {
+                TLRPC.VideoSize videoSize = userFull.profile_photo.video_sizes.get(0);
+                ImageLocation videoLocation = ImageLocation.getForPhoto(videoSize, userFull.profile_photo);
+                imageReceiver.setImage(videoLocation, "g", new ColorDrawable(0x00000000), null, userFull.user, 1);
+            }
+        }
+
         applyBackground(true);
+    }
+
+    @Override
+    public void didReceivedNotification(int id, int account, Object... args) {
+        if (id == NotificationCenter.mainUserInfoChanged) {
+            if (NekoConfig.enableAnimatedDrawer && !NekoConfig.avatarBackgroundDarken && !NekoConfig.avatarBackgroundBlur) {
+                imageReceiver.clearImage();
+                TLRPC.UserFull userFull = MessagesController.getInstance(account).getUserFull(UserConfig.getInstance(account).getClientUserId());
+                if (userFull.profile_photo != null && !userFull.profile_photo.video_sizes.isEmpty()) {
+                    TLRPC.VideoSize videoSize = userFull.profile_photo.video_sizes.get(0);
+                    ImageLocation videoLocation = ImageLocation.getForPhoto(videoSize, userFull.profile_photo);
+                    imageReceiver.setImage(videoLocation, "g", new ColorDrawable(0x00000000), null, userFull.user, 1);
+                }
+            }
+        }
     }
 
     public String applyBackground(boolean force) {
