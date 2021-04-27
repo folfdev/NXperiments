@@ -4698,7 +4698,7 @@ public class MessageObject {
                 return attribute.supports_streaming;
             }
         }
-        if (SharedConfig.streamMkv && "video/x-matroska".equals(document.mime_type)) {
+        if (SharedConfig.streamMkv && ("video/x-matroska".equals(document.mime_type) || "video/webm".equals(document.mime_type))) {
             return true;
         }
         return false;
@@ -4859,7 +4859,7 @@ public class MessageObject {
             }
             if (!TextUtils.isEmpty(document.mime_type)) {
                 String mime = document.mime_type.toLowerCase();
-                if (mime.equals("audio/flac") || mime.equals("audio/ogg") || mime.equals("audio/opus") || mime.equals("audio/x-opus+ogg") || mime.equals("audio/wav") || mime.equals("audio/x-wav")) {
+                if (mime.equals("audio/flac") || mime.equals("audio/ogg") || mime.equals("audio/opus") || mime.equals("audio/x-opus+ogg") || mime.equals("audio/wav") || mime.equals("audio/x-wav") || mime.equals("audio/webm")) {
                     return true;
                 } else if (mime.equals("application/octet-stream") && FileLoader.getDocumentFileName(document).endsWith(".opus")) {
                     return true;
@@ -4900,7 +4900,7 @@ public class MessageObject {
         if (isAnimated && (width > 1280 || height > 1280)) {
             isAnimated = false;
         }
-        if (SharedConfig.streamMkv && !isVideo && "video/x-matroska".equals(document.mime_type)) {
+        if (SharedConfig.streamMkv && !isVideo && ("video/x-matroska".equals(document.mime_type) || "video/webm".equals(document.mime_type))) {
             isVideo = true;
         }
         return isVideo && !isAnimated;
